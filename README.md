@@ -1,8 +1,9 @@
 # Otto
 
-A single-user agent that watches a recurring purchase (milk), predicts run-out,
-picks the cheapest source, and sends a one-tap reorder nudge. No auto-checkout —
-nudge + confirm only.
+A single-user agent that watches recurring purchases (milk, diapers, coffee, …),
+predicts run-out per item, picks the cheapest source, and sends a one-tap
+"Buy at {store}" nudge. The Buy link hands you off to the store — no autonomous
+checkout in v1.
 
 > Brand name lives in `BRAND` (`lib/config.ts`). Rename Otto in one place.
 
@@ -11,24 +12,47 @@ nudge + confirm only.
 - Next.js (App Router, TypeScript) on Vercel
 - Vercel AI SDK v6 + OpenAI (`gpt-5-nano`)
 - MongoDB (one JSON document under `otto:state`)
-- Resend (email nudge)
+- Resend (digest email)
 - Vercel Cron (daily trigger)
 
 ## How it works
 
 1. A daily cron `POST`s `/api/cron/check` with a `Bearer ${CRON_SECRET}` header.
-2. The agent (`lib/agent.ts`) calls two read tools — `getInventoryState` and
-   `getPrices` — then returns a structured decision
-   `{ reorder, store, total, reason, message }`.
-3. If `reorder` is true and there's no live pending nudge, the route emails the
-   owner via Resend with the agent's message and a one-tap confirm link, and
-   records a `pendingNudge`.
-4. Tapping the link hits `GET /api/confirm?token=...`, which validates the
-   HMAC-signed token, resets `lastPurchasedAt` to now, clears the pending nudge,
-   and shows a small confirmation page.
+2. For **each item** in state, the agent (`lib/agent.ts`) calls two read tools —
+   `getInventoryState` and `getPrices` (the latter via the commerce provider) —
+   then returns a structured decision `{ reorder, store, total, reason, message }`.
+3. Items that are due (and have no live pending nudge) are collected into **one
+   digest email** via Resend, each row showing the chosen store, total, and a
+   "Buy at {store}" button. A per-item `pendingNudge` is recorded with an
+   expiry guard so the daily cron doesn't re-nudge.
+4. Tapping a button hits `GET /api/buy?item={id}&token=...`, which validates the
+   HMAC-signed token, asks the provider to `checkout` (a deep link in v1), resets
+   that item's `lastPurchasedAt`, clears its pending nudge, and `302`-redirects to
+   the store.
+5. `GET /api/confirm?item={id}&token=...` is the manual "I bought it" alias — it
+   resets one item without redirecting to a store.
+
+> **v1 assumption:** tapping Buy = intent to purchase = clock reset. This is a
+> deliberate simplification until a real ordering API can confirm the purchase.
 
 Inventory math (`lib/inventory.ts`) is pure and unit-tested (Vitest). No LLM,
 no side effects.
+
+## Commerce provider (the keystone)
+
+`lib/commerce/` owns **both** price lookup and checkout behind one
+`CommerceProvider` interface:
+
+- `ConfigHandoffProvider` (active) — config prices + deep-link buy. Works today,
+  no API.
+- `AutonomousProvider` (stub) — where live prices + real ordering land once an
+  Instacart/Uber early-access door opens.
+
+`lib/commerce/index.ts` exports the single active `provider` — the only place a
+concrete provider is referenced (mirrors `lib/model.ts`). When access is granted,
+implement `AutonomousProvider` and flip that one export: live pricing and
+autonomous buying light up together, and nothing in the agent, state, cron, or
+notify layer changes.
 
 ## Setup
 
