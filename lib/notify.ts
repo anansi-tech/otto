@@ -1,12 +1,12 @@
 import { Resend } from "resend";
 import { BRAND } from "@/lib/config";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 // Resend requires a verified sender; override via FROM_EMAIL once a domain is set up.
 const FROM = process.env.FROM_EMAIL ?? "Otto <onboarding@resend.dev>";
 
 export async function sendNudge(email: string, subject: string, html: string) {
+  // Instantiated per-call so the build doesn't need the API key at module load.
+  const resend = new Resend(process.env.RESEND_API_KEY);
   return resend.emails.send({
     from: FROM,
     to: email,
