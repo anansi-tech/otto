@@ -9,8 +9,8 @@ nudge + confirm only.
 ## Stack
 
 - Next.js (App Router, TypeScript) on Vercel
-- Vercel AI SDK v5 + OpenAI (`gpt-4o-mini`)
-- Upstash Redis (one JSON blob under `otto:state`)
+- Vercel AI SDK v6 + OpenAI (`gpt-5-nano`)
+- MongoDB (one JSON document under `otto:state`)
 - Resend (email nudge)
 - Vercel Cron (daily trigger)
 
@@ -35,7 +35,7 @@ no side effects.
 ```bash
 npm install
 cp .env.example .env   # fill in the values
-npm run seed           # writes otto:state to Upstash (uses NOTIFY_EMAIL)
+npm run seed           # writes otto:state to MongoDB (uses NOTIFY_EMAIL)
 npm run dev
 ```
 
@@ -43,9 +43,10 @@ npm run dev
 
 | Var | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Agent model (gpt-4o-mini) |
+| `OPENAI_API_KEY` | Agent model (gpt-5-nano) |
 | `RESEND_API_KEY` | Email delivery |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | State store |
+| `MONGODB_URI` | State store connection string |
+| `MONGODB_DB` | Database name (optional, defaults to `otto`) |
 | `CRON_SECRET` | Bearer token the cron must send |
 | `APP_URL` | Base URL for confirm links |
 | `NOTIFY_EMAIL` | Owner's email (used by the seed) |
