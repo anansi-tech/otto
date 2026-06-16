@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { getState, setState } from "@/lib/state";
 import { runAgent } from "@/lib/agent";
-import { sendNudge, nudgeHtml } from "@/lib/notify";
+import { sendNudge, digestHtml, type DigestRow } from "@/lib/notify";
 import { sign } from "@/lib/token";
-import { BRAND } from "@/lib/config";
+import { BRAND, type ItemConfig } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // A pending nudge is considered live for this long; within the window we don't
-// re-notify (the daily cron would otherwise email every day until confirmed).
+// re-notify (the daily cron would otherwise email every day until handled).
 const NUDGE_TTL_HOURS = 48;
 
 function isExpired(createdAt: string, now: Date): boolean {
@@ -28,33 +28,38 @@ export async function POST(req: Request) {
   }
 
   const now = new Date();
-  const decision = await runAgent(state, now);
+  const rows: DigestRow[] = [];
+  const due: { id: string; store: string; total: number }[] = [];
+  const items: ItemConfig[] = [];
 
-  const hasLiveNudge =
-    state.pendingNudge !== null && !isExpired(state.pendingNudge.createdAt, now);
+  for (const item of state.items) {
+    const decision = await runAgent(item, now);
+    const hasLiveNudge =
+      item.pendingNudge !== null && !isExpired(item.pendingNudge.createdAt, now);
 
-  let notified = false;
-  if (decision.reorder && !hasLiveNudge) {
-    const createdAt = now.toISOString();
-    const token = sign(createdAt);
-    const confirmUrl = `${process.env.APP_URL}/api/confirm?token=${token}`;
+    if (decision.reorder && !hasLiveNudge) {
+      const createdAt = now.toISOString();
+      const token = sign(`${item.id}:${createdAt}`);
+      const buyUrl = `${process.env.APP_URL}/api/buy?item=${encodeURIComponent(item.id)}&token=${token}`;
+      const store = decision.store ?? "";
+      const total = decision.total ?? 0;
 
-    await sendNudge(
-      state.notifyEmail,
-      `${BRAND}: time to reorder ${state.itemName}`,
-      nudgeHtml(decision.message, confirmUrl),
-    );
-
-    await setState({
-      ...state,
-      pendingNudge: {
-        createdAt,
-        store: decision.store ?? "",
-        total: decision.total ?? 0,
-      },
-    });
-    notified = true;
+      rows.push({ name: item.name, store, total, buyUrl, message: decision.message });
+      due.push({ id: item.id, store, total });
+      items.push({ ...item, pendingNudge: { createdAt, store, total } });
+    } else {
+      items.push(item);
+    }
   }
 
-  return NextResponse.json({ decision, notified });
+  if (rows.length > 0) {
+    await sendNudge(
+      state.notifyEmail,
+      `${BRAND}: ${rows.length} item${rows.length === 1 ? "" : "s"} to reorder`,
+      digestHtml(rows),
+    );
+    await setState({ ...state, items });
+  }
+
+  return NextResponse.json({ evaluated: state.items.length, due });
 }
