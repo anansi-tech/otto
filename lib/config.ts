@@ -2,10 +2,11 @@
 // Used in emails and the confirm page.
 export const BRAND = "Otto";
 
-export type Store = {
+export type StoreConfig = {
   name: string;
-  pricePerGallon: number;
+  pricePerUnit: number;
   deliveryFee: number;
+  buyUrlTemplate: string; // e.g. "https://www.instacart.com/store/aldi/search/{query}"
 };
 
 export type PendingNudge = {
@@ -14,14 +15,19 @@ export type PendingNudge = {
   total: number;
 };
 
-export type State = {
-  itemName: string; // "milk"
+export type ItemConfig = {
+  id: string; // slug, e.g. "milk"
+  name: string; // "milk"
   unit: string; // "gallon"
-  purchaseQty: number; // gallons bought per purchase, e.g. 2
-  gallonsPerWeek: number; // consumption rate, e.g. 4
-  leadTimeDays: number; // reorder this many days before run-out, e.g. 1
+  purchaseQty: number; // per purchase
+  consumePerWeek: number; // consumption rate (generic; was v0 gallonsPerWeek)
+  leadTimeDays: number; // reorder this many days before run-out
   lastPurchasedAt: string; // ISO date
-  stores: Store[];
-  notifyEmail: string;
+  stores: StoreConfig[];
   pendingNudge: PendingNudge | null;
+};
+
+export type State = {
+  notifyEmail: string;
+  items: ItemConfig[];
 };
